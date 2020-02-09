@@ -1,0 +1,215 @@
+---
+title: "Hospital Compare"
+author: "Mohammed Rahman"
+date: "September 7, 2019"
+output: html_document
+---
+```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+library(tidyverse)
+library(ggplot2)
+library(Amelia)
+library(data.table)
+library(readr)
+library(janitor)
+library(skimr)
+library(caTools)
+library(caret)
+library(randomForest)
+library(MASS)
+library(data.table)
+library(gt)
+library(dplyr)
+
+
+```
+
+```{r Loading in all the datasets}
+#Loading in all the datasets
+hcgen <- fread("Hospital_General_Information.csv", head = T)
+hcreadmission <- fread("Hospital_Readmissions_Reduction_Program.csv", head = T)
+hcdeaths <- fread("Complications_and_Deaths_-_Hospital.csv", head = T)
+hctimecare <- fread("Timely_and_Effective_Care_-_Hospital.csv", head = T)
+```
+
+```{r}
+hcgen <- clean_names(hcgen)
+hcreadmission <- clean_names(hcreadmission)
+hcdeaths <- clean_names(hcdeaths)
+hctimecare <- clean_names(hctimecare)
+```
+
+```{r}
+skim(hcgen)
+
+hcgendf <- hcgen %>% select(-city, -address,  -county_name, -hospital_overall_rating_footnote, -safety_of_care_national_comparison_footnote, -mortality_national_comparison_footnote, -readmission_national_comparison_footnote, -patient_experience_national_comparison_footnote, -effectiveness_of_care_national_comparison_footnote, -timeliness_of_care_national_comparison_footnote, -efficient_use_of_medical_imaging_national_comparison_footnote, -location, -zip_code, -phone_number)
+
+#Consider the variable meets_criteria_for_meaningful_use_of_eh_rs and if the NA's mean False
+
+hcgendf[,9:15][hcgendf[,9:15] == "Not Available"] <- "Other"
+
+hcgendf <- hcgendf %>% mutate(effectiveness_of_care_national_comparison = as.factor(effectiveness_of_care_national_comparison), efficient_use_of_medical_imaging_national_comparison = as.factor(efficient_use_of_medical_imaging_national_comparison), hospital_overall_rating = as.numeric(hospital_overall_rating), hospital_ownership = as.factor(hospital_ownership), hospital_type = as.factor(hospital_type), mortality_national_comparison = as.factor(mortality_national_comparison), patient_experience_national_comparison = as.factor(patient_experience_national_comparison), readmission_national_comparison = as.factor(readmission_national_comparison), safety_of_care_national_comparison = as.factor(safety_of_care_national_comparison), state = as.factor(state), timeliness_of_care_national_comparison = as.factor(timeliness_of_care_national_comparison), emergency_services = as.factor(emergency_services), meets_criteria_for_meaningful_use_of_eh_rs = as.factor(meets_criteria_for_meaningful_use_of_eh_rs))
+
+skim(hcgendf)
+
+
+```
+
+
+
+```{r timecare}
+skim(hctimecare)
+hctimecare %>% group_by(measure_name) %>% count(score == "Not Available") %>% View()
+
+hctimecaredf <- hctimecare %>% filter(measure_name == "Healthcare workers given influenza vaccination") %>% dplyr::select(provider_id, score) %>% rename("vaccination_score" = score)
+
+df <- inner_join(hcgendf, hctimecaredf, by = "provider_id")
+
+hctimecaredf <- hctimecare %>% filter(measure_name == "Immunization for influenza") %>% dplyr::select(provider_id, score) %>% rename("immunization_score" = score)
+
+df <- inner_join(df, hctimecaredf, by = "provider_id")
+
+hctimecaredf <- hctimecare %>% filter(measure_name == "Average (median) time patients spent in the emergency department before leaving from the visit A lower number of minutes is better") %>% dplyr::select(provider_id, score) %>% rename("timespent_score" = score)
+
+df <- inner_join(df, hctimecaredf, by = "provider_id")
+
+
+```
+
+```{r deaths}
+skim(hcdeaths)
+
+hcdeaths %>% group_by(measure_name) %>% count(score == "Not Available") %>% View()
+
+hcdeathsdf <- hcdeaths %>% filter(measure_name == "Serious complications") %>% dplyr::select(provider_id, score) %>% rename("complications_score" = score)
+
+# a <- as.numeric(hcdeathsdf$provider_id)
+# a <- is.na(a)
+# which(a)
+# hcdeathsdf[a,] %>% View()
+
+df$provider_id <- as.character(df$provider_id)
+df <- inner_join(df, hcdeathsdf, by = "provider_id")
+
+```
+
+```{r}
+df[df=="Not Available"] = NA
+df_summ <- df %>% dplyr::select(-hospital_name) %>% mutate_if(is.character, as.numeric)
+
+
+
+df_summ %>% group_by(state) %>% count(sum(is.finite(vaccination_score)),
+                                      sum(is.finite(immunization_score)),
+                                      sum(is.finite(timespent_score)),
+                                      sum(is.finite(complications_score)))
+df_summ <- df_summ %>% group_by(state) %>% filter(sum(sum(is.finite(vaccination_score)),
+                                      sum(is.finite(immunization_score)),
+                                      sum(is.finite(timespent_score)),
+                                      sum(is.finite(complications_score))) > 120)
+
+
+df_summ %>% group_by(state) %>%
+  summarise("median_time" = median(timespent_score, na.rm = T)) %>%
+  dplyr::arrange(desc(median_time)) %>% 
+  head(5) %>%
+  gt()
+
+
+df_summ %>% group_by(state) %>%
+  summarise("median_comp" = median(complications_score, na.rm = T)) %>%
+  dplyr::arrange(desc(median_comp)) %>% 
+  head(5) %>%
+  gt()
+
+df_summ %>% group_by(state) %>%
+  summarise("median_imm" = median(immunization_score, na.rm = T)) %>%
+  dplyr::arrange(desc(median_imm)) %>% 
+  head(5) %>%
+  gt()
+
+df_summ %>% group_by(state) %>%
+  summarise("median_vacc" = median(vaccination_score, na.rm = T)) %>%
+  dplyr::arrange(desc(median_vacc)) %>% 
+  head(5) %>%
+  gt()
+
+#######
+df_summ <- df %>% dplyr::select(-hospital_name) %>% mutate_if(is.character, as.numeric)
+
+df_summ %>% group_by(hospital_ownership) %>%
+  summarise("median_time" = median(timespent_score, na.rm = T)) %>%
+  dplyr::arrange(desc(median_time)) %>% 
+  head(5) %>%
+  gt()
+
+
+df_summ %>% group_by(hospital_ownership) %>%
+  summarise("median_comp" = median(complications_score, na.rm = T)) %>%
+  dplyr::arrange(desc(median_comp)) %>% 
+  head(5) %>%
+  gt()
+
+df_summ %>% group_by(hospital_ownership) %>%
+  summarise("median_imm" = median(immunization_score, na.rm = T)) %>%
+  dplyr::arrange(desc(median_imm)) %>% 
+  head(5) %>%
+  gt()
+
+df_summ %>% group_by(hospital_ownership) %>%
+  summarise("median_vacc" = median(vaccination_score, na.rm = T)) %>%
+  dplyr::arrange(desc(median_vacc)) %>% 
+  head(5) %>%
+  gt()
+
+
+
+```
+
+
+```{r Stats models}
+hf <- df %>% dplyr::select(-provider_id, - meets_criteria_for_meaningful_use_of_eh_rs, -hospital_overall_rating, -state)
+set.seed(101) 
+
+hf <- hf %>% filter(mortality_national_comparison != "Other") %>% mutate(timespent_score = log(as.numeric(timespent_score)), complications_score = log(as.numeric(complications_score)), immunization_score = log(as.numeric(immunization_score)), vaccination_score = as.numeric(vaccination_score))
+hf$mortality_national_comparison <- droplevels(hf$mortality_national_comparison) 
+
+hist(hf$vaccination_score)
+sample <- sample.split(hf$hospital_name, SplitRatio = 0.70) # SplitRatio = percent of sample==TRUE
+
+# Training Data
+train = subset(hf, sample == TRUE)
+
+# Testing Data
+test = subset(hf, sample == FALSE)
+
+train = na.omit(train)
+rf.fit <- randomForest(mortality_national_comparison ~ timespent_score, data = train, ntrees = 500)
+
+pred <- predict(rf.fit, newdata = test, type = "class")
+confusionMatrix(pred, test$mortality_national_comparison)
+importance(rf.fit)
+
+lda.fit <- lda(mortality_national_comparison ~ immunization_score + vaccination_score + immunization_score : vaccination_score, data = train)
+
+pred <- predict(lda.fit, newdata = test, type = "class")
+confusionMatrix(pred$class, test$mortality_national_comparison)
+
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
+```{r}
+
+```
+
