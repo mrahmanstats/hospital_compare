@@ -2,18 +2,18 @@
     "collab_server" : "",
     "contents" : "",
     "created" : 1581221385496.000,
-    "dirty" : false,
+    "dirty" : true,
     "encoding" : "UTF-8",
     "folds" : "",
-    "hash" : "3731941693",
+    "hash" : "0",
     "id" : "522CF3BE",
     "lastKnownWriteTime" : 1581221704,
-    "last_content_update" : 1581221704335,
+    "last_content_update" : 1581221823376,
     "path" : "~/GitHub/hospital_compare/Hospital Compare.rmd",
     "project_path" : "Hospital Compare.rmd",
     "properties" : {
-        "cursorPosition" : "80,1",
-        "scrollLine" : "67"
+        "cursorPosition" : "45,34",
+        "scrollLine" : "38"
     },
     "relative_order" : 1,
     "source_on_save" : false,

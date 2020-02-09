@@ -5,6 +5,7 @@ date: "September 7, 2019"
 output: html_document
 ---
 ```{r message=FALSE, warning=FALSE, paged.print=FALSE}
+#Loading Packages
 library(tidyverse)
 library(ggplot2)
 library(Amelia)
@@ -32,6 +33,7 @@ hctimecare <- fread("Timely_and_Effective_Care_-_Hospital.csv", head = T)
 ```
 
 ```{r}
+#Cleaning names
 hcgen <- clean_names(hcgen)
 hcreadmission <- clean_names(hcreadmission)
 hcdeaths <- clean_names(hcdeaths)
@@ -41,6 +43,7 @@ hctimecare <- clean_names(hctimecare)
 ```{r}
 skim(hcgen)
 
+#Removing non-analytical variables
 hcgendf <- hcgen %>% 
   select(-city, -address,  -county_name, -hospital_overall_rating_footnote,
          -safety_of_care_national_comparison_footnote, -mortality_national_comparison_footnote,
